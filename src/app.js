@@ -10,6 +10,13 @@ import bodyParser from 'body-parser';
 const app = express();
 
 
+// 开发阶段允许跨域访问
+app.all('*', (req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  next();
+});
+
+
 // using session
 app.use(session({
   secret: '52dachu',
@@ -106,22 +113,44 @@ function queryArticleDetail(pathname, callback) {
 
 function queryActicles(page, callback) {
   let pageSize = 2;
-  let limit = '0,10000';
-  let sql = `SELECT id, title, pathname, summary, create_time, status FROM dc_post ORDER BY create_time DESC LIMIT ${limit}`;
-  pool.query(sql, (err, rows) => {
-    if (err) throw(err);
-    callback(rows);
+  let limit  = (page - 1) * pageSize + ',' + pageSize;
+
+  function getCount(callback) {
+    pool.query('SELECT count(id) FROM dc_post', (err, rows) => {
+      if (err) throw(err);
+      callback(rows[0]['count(id)']);
+    });
+  }
+
+  function getArticle(callback) {
+    let sql = `SELECT id, title, pathname, summary, create_time, status FROM dc_post ORDER BY create_time DESC LIMIT ${limit}`;
+    pool.query(sql, (err, rows) => {
+      if (err) throw(err);
+      callback(rows);
+    });  
+  }
+
+  getArticle((articles) => {
+    getCount((count) => {
+      callback({
+        articles: articles,
+        pageSize: pageSize,
+        currentPage: page,
+        count: count,
+        totalPages: Math.ceil(count / pageSize)
+      });
+    });
   });
 }
 
 // article
 app.get('/admin/article(/:pathname)?', (req, res) => {
-  let page = req.query.page;
+  let page = parseInt(req.query.page) || 1;
   let pathname = req.params.pathname;
   
   if (typeof pathname === 'undefined') {
-    queryActicles(page || 1, (data) => {
-      res.send(data);
+    queryActicles(page, (data) => {
+      res.send({ data: data });
     });
   } else {
     queryArticleDetail(pathname, (data) => {

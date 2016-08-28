@@ -3,7 +3,7 @@
   "description": "",
   "version": "1.0.0",
   "scripts": {
-    "start": "",
+    "start": "nodemon app/app.js",
     "build": "babel src -d app --watch"
   },
   "dependencies": {
