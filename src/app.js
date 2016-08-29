@@ -4,6 +4,9 @@ import bcrypt     from 'bcrypt';
 import async      from 'async';
 import session    from 'express-session';
 import bodyParser from 'body-parser';
+import "babel-polyfill";
+
+import * as articleModel from './models/article'; 
 
 
 // create application
@@ -57,6 +60,16 @@ function comparePassword(password, hash, callback) {
 }
 
 
+function success(data) {
+  return { isOk: true, errmsg: '', data: data };
+}
+
+
+function error(msg) {
+  return { isOk: false, errmsg: msg, data: null };
+}
+
+
 // login detection
 // app.use(function(req, res, next) {
 //   if (req.path === '/admin/login' || req.session.isLogin) {
@@ -98,64 +111,31 @@ app.post('/admin/login', (req, res) => {
 });
 
 
-
-function queryArticleDetail(pathname, callback) {
-  let sql = 'SELECT id, title, pathname, content, create_time, status FROM dc_post WHERE pathname = ?';
-  pool.query(sql, [ pathname ], (err, rows) => {
-    if (err) throw(err);
-    if (rows.length > 0) {
-      callback(rows[0]);
-    } else {
-      callback(null);
-    }
-  });
-}
-
-function queryActicles(page, callback) {
-  let pageSize = 2;
-  let limit  = (page - 1) * pageSize + ',' + pageSize;
-
-  function getCount(callback) {
-    pool.query('SELECT count(id) FROM dc_post', (err, rows) => {
-      if (err) throw(err);
-      callback(rows[0]['count(id)']);
-    });
-  }
-
-  function getArticle(callback) {
-    let sql = `SELECT id, title, pathname, summary, create_time, status FROM dc_post ORDER BY create_time DESC LIMIT ${limit}`;
-    pool.query(sql, (err, rows) => {
-      if (err) throw(err);
-      callback(rows);
-    });  
-  }
-
-  getArticle((articles) => {
-    getCount((count) => {
-      callback({
-        articles: articles,
-        pageSize: pageSize,
-        currentPage: page,
-        count: count,
-        totalPages: Math.ceil(count / pageSize)
-      });
-    });
-  });
-}
-
 // article
-app.get('/admin/article(/:pathname)?', (req, res) => {
-  let page = parseInt(req.query.page) || 1;
+app.get('/admin/article(/:pathname)?', async (req, res) => {
   let pathname = req.params.pathname;
   
+  // 没有 pathname 就获取文章列表
   if (typeof pathname === 'undefined') {
-    queryActicles(page, (data) => {
-      res.send({ data: data });
-    });
-  } else {
-    queryArticleDetail(pathname, (data) => {
-      res.send(data);
-    });
+    let page = parseInt(req.query.page) || 1;
+    
+    try {
+      let data = await articleModel.findByPage(page);
+      res.send(success(data));
+    } catch(err) {
+      // todo: 记录错误日志
+      res.send(error('服务异常！'));
+    }
+  } 
+  // 有 pathname 就获取对应的文章详情
+  else {
+    try {
+      let data = await articleModel.findByPathname(pathname);
+      res.send(success(data));
+    } catch(err) {
+      // todo: 记录错误日志
+      res.send(error('服务异常！'));
+    }
   }
 });
 
